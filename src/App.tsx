@@ -1,126 +1,101 @@
+import { useMemo, useState } from "react";
 import "./styles.css";
+import { useStation } from "./data/useStation";
+import { selectReviewQueue, stationStore } from "./data/station";
+import { RULE_VERSION } from "./rules/engine";
+import { BatchPanel } from "./components/BatchPanel";
+import { SheetPanel } from "./components/SheetPanel";
+import { ReviewQueue } from "./components/ReviewQueue";
+import { BalancePanel } from "./components/BalancePanel";
+import { HistoryPanel } from "./components/HistoryPanel";
+import { RulePanel } from "./components/RulePanel";
+import { Notice } from "./components/ui";
 
-const project = {
-  "sourceNo": 7,
-  "id": "hxyfront-62012",
-  "port": 62012,
-  "title": "纺织染整小样管理",
-  "domain": "纺织染整",
-  "prompt": "我需要一个纺织染整实验室的小样管理前端系统，可以记录面料成分、克重、染料配方、浴比、温度曲线、保温时间、后整理方式、色差值和评审结果。页面需要有小样批次列表、配方比例展示、Lab色差对比、工艺曲线摘要和按客户订单筛选。",
-  "palette": [
-    "#be123c",
-    "#4f46e5",
-    "#16a34a"
-  ],
-  "metrics": [
-    "小样批次",
-    "色差超限",
-    "客户订单",
-    "通过率"
-  ],
-  "filters": [
-    "棉",
-    "涤纶",
-    "锦纶",
-    "混纺"
-  ],
-  "fields": [
-    "面料成分",
-    "克重",
-    "染料配方",
-    "浴比",
-    "保温时间",
-    "色差值"
-  ],
-  "records": [
-    [
-      "LAB-620A",
-      "棉府绸120g",
-      "ΔE 0.84",
-      "评审通过"
-    ],
-    [
-      "LAB-621C",
-      "涤纶针织",
-      "升温曲线偏快",
-      "待复染"
-    ],
-    [
-      "LAB-624B",
-      "混纺斜纹",
-      "后整理柔软剂2%",
-      "客户确认中"
-    ]
-  ]
-};
+type NotifyKind = "ok" | "err" | "dup";
 
 function App() {
+  const state = useStation();
+  const [selectedSheetId, setSelectedSheetId] = useState<string | null>(state.sheets[0]?.id ?? null);
+  const [toast, setToast] = useState<{ kind: NotifyKind; text: string } | null>(null);
+
+  const sheet = state.sheets.find((s) => s.id === selectedSheetId) ?? null;
+  const reviewQueue = useMemo(() => selectReviewQueue(state), [state]);
+
+  const metrics = useMemo(() => {
+    const released = state.sheets.filter((s) => s.status === "released");
+    return [
+      { label: "面料批次", value: state.batches.length },
+      { label: "检测单（已结束/总数）", value: `${state.sheets.filter((s) => s.status !== "open").length}/${state.sheets.length}` },
+      { label: "待复核队列", value: reviewQueue.length },
+      { label: "已放行克重", value: released.length },
+    ];
+  }, [state, reviewQueue]);
+
+  const notify = (kind: NotifyKind, text: string) => {
+    setToast({ kind, text });
+  };
+
   return (
     <main className="app">
-      <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
+      <section className="hero compact">
+        <div className="hero-top">
+          <p>hxyfront-62012 · 回潮检测与克重放行台 · 规则 {RULE_VERSION}</p>
+          <button className="ghost" onClick={() => stationStore.resetDemo()}>重置演示数据</button>
+        </div>
+        <h1>染整小样 · 回潮检测与克重放行台</h1>
+        <span>
+          一批一单；烘干温度、时长、烘箱编号、两次称重齐全才可结束检测。天平校准过期或两次偏差超 0.5% 只进待复核，不得放行克重；
+          更正烘干或校准记录后原放行立即失效并重算，旧结论留档。规则、记录、页面分层承载。
+        </span>
       </section>
 
+      {toast && (
+        <div className="toast-wrap">
+          <Notice kind={toast.kind}>{toast.text}</Notice>
+          <button className="ghost" onClick={() => setToast(null)}>知道了</button>
+        </div>
+      )}
+
       <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[28, 6, 14, 91][index] ?? 10}</strong>
+        {metrics.map((m) => (
+          <article key={m.label}>
+            <small>{m.label}</small>
+            <strong>{m.value}</strong>
           </article>
         ))}
       </section>
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}分类</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
-
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存记录</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>近期记录</p>
-            <h2>工作台摘要</h2>
-          </div>
-          <button>导出CSV</button>
-        </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+      <section className="workspace three-col">
+        <BatchPanel
+          state={state}
+          selectedSheetId={selectedSheetId}
+          onSelectSheet={setSelectedSheetId}
+          onNotify={notify}
+        />
+        {sheet ? (
+          <SheetPanel key={sheet.id} state={state} sheet={sheet} onNotify={notify} />
+        ) : (
+          <section className="panel">
+            <p className="muted">请选择或新建一张检测单。</p>
+          </section>
+        )}
+        <div className="right-col">
+          <ReviewQueue
+            state={state}
+            selectedSheetId={selectedSheetId}
+            onSelectSheet={setSelectedSheetId}
+            onNotify={notify}
+          />
+          <BalancePanel state={state} onNotify={notify} />
         </div>
       </section>
+
+      <HistoryPanel state={state} selectedSheetId={selectedSheetId} onSelectSheet={setSelectedSheetId} />
+      <RulePanel />
+
+      <footer className="muted small footer-note">
+        规则引擎版本 {RULE_VERSION} · 记录持久化于浏览器 localStorage · 重复/并发提交沿用首次结果 · 刷新后批次、复核队列与检测履历保持一致
+      </footer>
     </main>
   );
 }
